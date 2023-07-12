@@ -19,6 +19,9 @@ library(glmmTMB)
 library(GLMMadaptive)
 library(car)
 library(patchwork)
+library(effects)
+library(corrplot)
+library(RColorBrewer)
 # library(curl)
 # library(jsonlite)
 # library(sf)
@@ -203,7 +206,9 @@ clima_malgrat <- clima_malgrat %>%
          maxrh21 = rollmean(max_relative_humidity, k = 21, align = "right", fill = NA),
          rain7 = rollapplyr(precipitation, 7, FUN=sum, align = "right", fill = NA),
          rain14 = rollapplyr(precipitation, 14, FUN=sum, align = "right", fill = NA),
-         rain21 = rollapplyr(precipitation, 21, FUN=sum, align = "right", fill = NA))
+         rain21 = rollapplyr(precipitation, 21, FUN=sum, align = "right", fill = NA),
+         rain28 = rollapplyr(precipitation, 21, FUN=sum, align = "right", fill = NA))
+
 
 str(clima_malgrat$YEAR)
 range(abundancias_aedes_bl$nrperspecies)
@@ -212,6 +217,7 @@ range(abundancias_aedes_bl$nrperspecies)
 range(clima_malgrat$mwime, na.rm = T) #debe estar comprendido entre 0 y 1
 ggplot(clima_malgrat, aes(x=doy, y=mwi7, color=YEAR)) + geom_line()+ facet_wrap(~YEAR)
 ggplot(clima_malgrat, aes(x=doy, y=photoperiod, color=YEAR)) + geom_line() + facet_wrap(~YEAR)
+
 ggplot(clima_malgrat, aes(x=doy, y=pho21, color=YEAR)) + geom_line() + facet_wrap(~YEAR)
 
 #nos aseguramos que las fechas estén en el mismo formato
@@ -247,6 +253,7 @@ for(i in 1:nrow(abundancias_jardin_tot)){
   rain7 <- clima_malgrat$rain7[clima_malgrat$start_date %in% x0]
   rain14 <- clima_malgrat$rain14[clima_malgrat$start_date %in% x0]
   rain21 <-clima_malgrat$rain21[clima_malgrat$start_date %in% x0]
+  rain28 <-clima_malgrat$rain28[clima_malgrat$start_date %in% x0]
   mintemp7 <- clima_malgrat$mintemp7[clima_malgrat$start_date %in% x0]
   mintemp14 <- clima_malgrat$mintemp14[clima_malgrat$start_date %in% x0]
   mintemp21 <- clima_malgrat$mintemp21[clima_malgrat$start_date %in% x0]
@@ -585,7 +592,6 @@ abundances_with_gdd$start_date <- as_date(as.POSIXct(abundances_with_gdd$start_d
 
 
 #Tratamiento de datos de turistas
-
 datatourist <- datatourist %>% 
   group_by(start_date) %>% 
   summarise(nrturist = sum(Tourist))
@@ -624,7 +630,8 @@ for(i in 1:nrow(abundances_with_tourist)){
   abundances_with_tourist$nturist7[i] <- nturist7
   abundances_with_tourist$nturist14[i] <- nturist14
   abundances_with_tourist$nturist21[i] <- nturist21
-}
+} #acumulacion de turistas en las semanas previas - posible efecto de cantidad de
+#turistas en las semanas previas y aumento de las abundancias
   
 
 ### Breeding sites - imbornales
@@ -666,23 +673,12 @@ datacontrol <- datacontrol %>%
   rename("start_date" = `fecha`)
 datacontrol <- datacontrol %>% #creamos columna mes
   add_column(week = NA)
-
 datacontrol$week <- lubridate::week(ymd(datacontrol$start_date))
 datacontrol$week <- as.factor(datacontrol$week)
-
 abundancias_em_con <- left_join(abundancias_em, datacontrol, by = "week")
 abundancias_em_con$volumen_Control[is.na(abundancias_em_con$volumen_Control)] <- 0
 
-abundancias_aedes_bl$week <- as.character(abundancias_aedes_bl$week)
-
-
-abundancias_aedes_bl$week <- as.numeric(abundancias_aedes_bl$week)
-datacontrol$week <- as.character(datacontrol$week)
-datacontrol$week <- as.numeric(datacontrol$week)
-abundances_with_tourist$week <- as.character(abundances_with_tourist$week)
-abundances_with_tourist$week <- as.numeric(abundances_with_tourist$week)
-
-##calculate cumulative date control
+##calculate WEEK SINCE CONTROL
 
 all_dates<- as.data.frame(seq.Date(from = as_date("2021-04-12"), to = as_date("2021-11-22"), by = "day"))
 all_dates <- all_dates %>%
@@ -727,8 +723,9 @@ abundancias_em_con <-  mclapply(1:nrow(abundancias_em_con), function(i){
 )
 
 abundancias_em_con <- do.call(rbind, abundancias_em_con)
-# p <- abundancias_em_con %>% 
-#   select(start_date.x, end_date, start_date.y, weeksince)
+p <- abundancias_em_con %>%
+  select(start_date.x, end_date, start_date.y, weeksince) #Check calculations
+
 # firstc <- p[1:22, ]
 # firstc$weeksince <- firstc$weeksince -1
 # second <- p[23:60,]
@@ -745,8 +742,13 @@ abundancias_em_con <- do.call(rbind, abundancias_em_con)
 #                             (weeksince < 4) ~ 1)) 
 # abundancias_em_con$control_f <- test$control_f
 # abundancias_em_con$control_f <- as.factor(abundancias_em_con$control_f)
-
-
+# 
+# p2 <- abundancias_em_con %>% 
+#   group_by(weeksince, trap_name) %>% 
+#   summarise(meanab = mean(nrperspecies))
+# 
+# p2 <- filter(p2, !weeksince == "9")
+# p2 <- filter(p2, !weeksince == "10")
 
 
 #Modelo oficial, con todas las variables climáticas previas tras el dredge por fases
@@ -755,8 +757,8 @@ modelo_ofi <- glmer.nb(nrperspecies ~ log(trapef) + scale(maxrh21) + scale(minrh
                        +scale(mintemp21) + scale(rain21) + scale(maxrh14) + scale(minrh14) +
                          scale(mintemp14) + scale(rain14) + scale(maxrh7) + scale(minrh7) +
                          scale(maxtemp7) + scale(rain7) + scale(max_relative_humidity) + 
-                         scale(min_relative_humidity) +  scale(n_imbornales_100) + scale(total_imb) +
-                         scale(n_imbornales_larva) +  scale(nrturist) + scale(n_imbornales_agua) + 
+                         scale(min_relative_humidity) +  scale(total_imb) +
+                         scale(n_imbornales_agua) + 
                          scale(poly(weeksince,2))
                        + scale(precipitation) + (1|trap_name), 
                        control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)),
@@ -770,45 +772,81 @@ NCMDFfull <- model.sel(NCMfull)
 selection_full <- as.data.frame(NCMDFfull)
 sw(NCMDFfull)
 writexl::write_xlsx(selection_full, path = "C:\\Users\\lblan\\OneDrive\\Escritorio\\CEAB\\2022\\Abundance_study\\selection_full.xlsx")
+
+#Nuestra base de datos es inmensa, así que es mejor que hagamos subset de todas las
+#variables que nos interesan en otro df para no perdernos
+abundancias_df <- abundancias_em_con %>% 
+  select(trapef, max_relative_humidity, minrh7, mintemp21, weeksince, n_imbornales_agua, 
+         nrturist, start_date.x, end_date, week, nrperspecies, trap_name, rain21,
+         rain14, rain7, rain28, precipitation,n_imbornales_agua)
+abundancias_df <- filter(abundancias_df, !weeksince == "9")
+abundancias_df <- filter(abundancias_df, !weeksince == "10")
+
+#Nuestro modelo oficial incluia maxRH, minrh7, mintemp21, weeksince, rain21, 
+#imbornales con agua y turistas. Quitaremos turistas e investigamos efecto de lluvia
+#y control
 modelo_ofi <- glmer.nb(nrperspecies ~ log(trapef) +  scale(max_relative_humidity) + scale(mintemp21) +
-                         scale(minrh7) + scale(rain21) +
-                         scale(nrturist) + scale(n_imbornales_agua) + 
-                         scale(poly(weeksince,2))+
+                         poly(weeksince,2)+  scale(minrh7) + scale(rain21) + 
+                         scale(n_imbornales_agua) +
+                         poly(weeksince,2):scale(rain21) +
                          (1|trap_name),
                        control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)),
-                       data = abundancias_em_con)
-
+                       data = abundancias_df)
 summary(modelo_ofi)
-check_model(modelo_ofi)
-newdata <- data.frame(minrh7 = abundancias_em_con$minrh7,
-                   mintemp21 = abundancias_em_con$mintemp21,
-                   max_relative_humidity = abundancias_em_con$max_relative_humidity,
-                   rain21= abundancias_em_con$rain21,
-                   nrturist = abundancias_em_con$nrturist,
-                   trapef = 7,
-                   n_imbornales_agua= 18,
-                   weeksince= abundancias_em_con$weeksince,
-                   trap_name= abundancias_em_con$trap_name)
+interactions_weeksince <- allEffects(modelo_ofi, residuals=F) # With this argument I can plot the partial residuals
+plot(interactions_weeksince)                                              # plotting main effects with partial residuals
+check_homogeneity(modelo_ofi) #test if we have homogeneity of varaince
+testOverdispersion(modelo_ofi) #test if we have overdispersion
+testResiduals(modelo_ofi) #residuals
+testZeroInflation(modelo_ofi) #test if our model is zero-inflated
+testUniformity(modelo_ofi) #test uniformity
+car::vif(modelo_ofi) #test collinearity
+car::Anova(modelo_ofi, type = 3) #how much our predictors explain the model?
 
-predict(modelo_ofi, newdata, type="response")
-predictiondata <- as.data.frame(predict(modelo_ofi, newdata, type="response"))
-predictiondata$predi <- predictiondata$`predict(modelo_ofi, newdata, type = "response")`
-abundances <- cbind(abundancias_em_con, predictiondata)
+# test correlation:
+V <- abundancias_df %>% 
+  select(weeksince, rain21,
+                mintemp21, max_relative_humidity,
+                trapef, minrh7, n_imbornales_agua)
+M <-cor(V)
+res1 <- cor.mtest(V, conf.level = .95)
+corrplot(M, type="upper", order="hclust",
+         col=brewer.pal(n=8, name="RdYlBu"), p.mat = res1$p,
+         insig = "label_sig",
+         sig.level = c(.001, .01, .05))
+
+
+#Predictions
+newdata <- data.frame(mintemp21 = abundancias_df$mintemp21,
+                   max_relative_humidity = abundancias_df$max_relative_humidity,
+                   minrh7 = abundancias_df$minrh7,
+                   rain21 = abundancias_df$rain21, 
+                   n_imbornales_agua = 43,
+                   trapef = 7,
+                   weeksince= 8,
+                   trap_name= "A_SP_BL_12")
+
+predict(modelo_ofi, newdata, type="response", allow.new.levels = T)
+predictiondata <- as.data.frame(predict(modelo_ofi, newdata, type="response",allow.new.levels = T))
+predictiondata$predi <- predictiondata$`predict(modelo_ofi, newdata, type = "response", allow.new.levels = T)`
+abundances <- cbind(abundancias_df, predictiondata)
 abundances$week <- as.character(abundances$week)
 abundances$week <- as.numeric(abundances$week)
 plot_abu <- abundances %>% 
   group_by(week) %>% 
-  summarise(sumpredi = sum(predi)) %>% 
   ggplot() +
-  geom_line(aes(x=week , y= sumpredi),col="red", size = 1.1) +
+  ylim(0,130) +
+  geom_line(aes(x= week, y= nrperspecies), data = filter(abundances, trap_name == "A_SP_BL_4")) +
+  geom_line(aes(x= week, y= nrperspecies), data = filter(abundances, trap_name == "A_SP_BL_5")) +
+  geom_line(aes(x= week, y= nrperspecies), data = filter(abundances, trap_name == "A_SP_BL_6")) +
+  geom_line(aes(x= week, y= nrperspecies), data = filter(abundances, trap_name == "A_SP_BL_7")) +
+  geom_line(aes(x= week, y= nrperspecies), data = filter(abundances, trap_name == "A_SP_BL_8")) +
+  geom_line(aes(x= week, y= nrperspecies), data = filter(abundances, trap_name == "A_SP_BL_9")) +
+  geom_line(data = abundances, aes(x=week , y= predi),col="red", size = 1.1) +
   theme_bw()
 
-preDIC <- abundances %>% 
-  group_by(start_date.x, month, end_date, trapef) %>% 
-  summarise(summos = sum(predi))
-preDIC$cumsumos = cumsum(preDIC$summos)
+plot_abu
 
-writexl::write_xlsx(abundancias_filter, path = "C:\\Users\\lblan\\OneDrive\\Escritorio\\CEAB\\2022\\Abundance_study\\abundanciasdf.xlsx")
 
 
 #prediction con todo 2021 para Jesús
@@ -872,9 +910,9 @@ newdata <- data.frame(minrh7 = pred_data$minrh7,
                       rain21= pred_data$rain21,
                       nrturist = pred_data$nrturist,
                       trapef = 7,
-                      n_imbornales_agua= 18,
-                      weeksince= sequence,
-                      trap_name= pred_data$trap_name)
+                      n_imbornales_agua= 43,
+                      # weeksince= sequence,
+                      trap_name= "A_SP_BL_12")
 
 predict(modelo_ofi, newdata, type="response", allow.new.levels = T)
 predictiondata <- as.data.frame(predict(modelo_ofi, newdata, type="response", allow.new.levels = T))
@@ -884,12 +922,16 @@ abundances <- cbind(pred_data, predictiondata)
 plot_abu <- abundances %>% 
   ggplot() +
   geom_line(aes(x=start_date , y= predi),col="red", size = 1.1) +
+  ylim(0,150) +
   theme_bw()
 
 preDIC <- abundances %>% 
   group_by(start_date) %>% 
   select(start_date, predi)
-preDIC$cumsumos = cumsum(preDIC$predi)
+
+
+writexl::write_xlsx(preDIC, path = "C:\\Users\\lblan\\OneDrive\\Escritorio\\CEAB\\2022\\Abundance_study\\predictionaverage.xlsx")
+
 
 ##PREDICCIÓN JARDÍN REAL TIME -----------------------------------
 

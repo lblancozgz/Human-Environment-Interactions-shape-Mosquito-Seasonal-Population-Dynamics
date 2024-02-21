@@ -26,6 +26,7 @@ library(RColorBrewer)
 
 #set directory and upload dataframe
 setwd("C:\\Users\\lblan\\OneDrive\\Escritorio\\CEAB\\2022\\Abundance_study")
+
 abundancias <- read_excel("C:\\Users\\lblan\\OneDrive\\Escritorio\\CEAB\\2022\\Abundance_study\\Abundancias_2021.xlsx",
                           sheet = "primer_filtro", col_types = c("skip",
                                                                  "text", "text", "text", "text", "skip",
@@ -599,6 +600,7 @@ datatourist <- datatourist %>%
 datatourist$start_date <- as.POSIXct(datatourist$start_date,format = '%Y-%m-%d')
 abundances_with_gdd$start_date <- as.POSIXct(abundances_with_gdd$start_date,format = '%Y-%m-%d')
 
+ggplot(datatourist, aes(x=start_date, y=nrturist)) + geom_line() #plot tourist
 #We join data with tourist, be careful to be linked with the sampling weeks
 abundances_with_tourist<- merge(abundances_with_gdd, datatourist, by = c("start_date", "week", "month"), all.x = T) 
 for(i in 1:nrow(abundances_with_tourist)){
@@ -792,12 +794,8 @@ testQuantiles(modelo_ofi)
 testDispersion(modelo_ofi)
 testZeroInflation(modelo_ofi)
 car::vif(modelo_ofi)
-
 testQuantiles(modelo_ofi)
-
-interactions_weeksince <- plot(allEffects(modelo_ofi, residuals=F)) # With this argument I can plot the partial residuals
-plot(effect("scale(weeksince)*scale(rain21)", modelo_ofi))
-
+performance::r2_nakagawa(modelo_ofi)
 
 #PREDICTION
 newdata <- data.frame(mintemp21 = abundancias_df$mintemp21,
@@ -805,7 +803,7 @@ newdata <- data.frame(mintemp21 = abundancias_df$mintemp21,
                       rain21 = abundancias_df$rain21, 
                       n_imbornales_agua =43,
                       nrturist = abundancias_df$nrturist,
-                      weeksince= 4,
+                      weeksince= abundancias_df$weeksince,
                       trap_name= "A_SP_BL_12")
 
 predict(modelo_ofi, newdata, type="response", allow.new.levels = T)
@@ -819,15 +817,249 @@ abundances$start_date.x <- as_date(abundances$start_date.x)
 Sys.setlocale(category = "LC_ALL", locale = "EN")
 plot_abu_tur <- abundances %>% 
   ggplot() +
-  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#FFB74F", linewidth = 0.55, data = filter(abundances, trap_name == "A_SP_BL_4")) +
-  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#FFB74F", linewidth = 0.55, data = filter(abundances, trap_name == "A_SP_BL_5")) +
-  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#FFB74F", linewidth = 0.55,data = filter(abundances, trap_name == "A_SP_BL_6")) +
-  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#FFB74F", linewidth = 0.55, data = filter(abundances, trap_name == "A_SP_BL_7")) +
-  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#FFB74F", linewidth = 0.55,data = filter(abundances, trap_name == "A_SP_BL_8")) +
-  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#FFB74F", linewidth = 0.55,data = filter(abundances, trap_name == "A_SP_BL_9")) +
-  geom_line(aes(x=start_date.x , y= predi),col="#652770", size = 1.6) +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_4")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_5")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_6")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_7")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_8")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_9")) +
+  geom_line(aes(x=start_date.x , y= predi),col="darkblue", size = 1.9) +
   scale_x_date("Sampling season", date_breaks = "1 month", date_labels = "%b") +
-  ylab("Abundance (average)") +
+  ylab("Abundance (average)") + ylim(0,100) +
   # scale_y_continuous(breaks = seq(from = 0, to = 700, by = 20))+
   theme_classic(base_size = 21)
-plot_abu_tur
+plotb <- plot_abu_tur #plot b in panel Figure 3
+
+
+#Plot a in panel Figure 3
+plota <- ggplot(abundancias_em_con, aes(x=start_date.x)) +
+  geom_col( aes(y=nrperspecies,),fill="#DE9826", alpha= 0.7,width =8) + 
+  geom_line(aes(y= rain21), color="#3C4C8F", linewidth=1.3) +  labs() + 
+  geom_line(aes(y = min_temperature*10),  col="#670012",size = 1.5) +  # Scale y2 by 10 for better visualization
+  scale_y_continuous(
+    name = "Abundance (total counts) \n Acc, Rainfall 3 weeks (mm)",
+    limits = c(0, 300),
+    sec.axis = sec_axis(~./10, name = "Min. temperature (Celsius)")
+  ) +
+  scale_x_date("Sampling season", date_breaks = "1 month", date_labels = "%b") +
+  theme_classic(base_size = 21) 
+
+
+#Plot C in panel Figure 3
+plotc<- ggplot(data=abundancias_df, aes(x=factor(weeksince), y=nrperspecies)) + 
+  geom_boxplot(col="#652770", linewidth = 0.8) +
+  geom_jitter(col="#DE9826", alpha=0.3, size=4.8) +
+  geom_smooth(aes(x=factor(weeksince), y=nrperspecies))+
+  xlab("Weeks since treatments") + ylab("Average abundance") + 
+  theme_classic(base_size = 21)
+
+
+
+#effect plot
+
+interactions_weeksince <- plot(allEffects(modelo_ofi, residuals=F)) # With this argument I can plot the partial residuals
+plot(effect("scale(weeksince)*scale(rain21)", modelo_ofi))
+interacdata <- effect("scale(weeksince)*scale(rain21)",modelo_ofi)
+effect_data <- as.data.frame(interacdata)
+effect_data <- effect_data %>%
+  rename("Number_mosquitoes" = `fit`)
+#Heat plot - Figure 4
+heat<- ggplot(effect_data, aes(factor(rain21), factor(weeksince))) +
+  geom_tile(aes(fill = Number_mosquitoes)) +
+  ylab("Weeks since treatments") + xlab("Acc. rainfall 3 weeks")+
+  geom_text(aes(label = round(Number_mosquitoes, 1)), size = 9) +
+  scale_fill_gradient(low = "white", high = "#652770") +
+  theme_classic(base_size = 25)
+heat <- heat + theme(legend.title = element_blank())  
+heat
+
+
+#Plot D figure 3
+effect_data <- as.data.frame(interacdata)
+effect_data$rain21 <- as.factor(effect_data$rain21)
+
+rain_names <- list(
+  '0.2'="Rain 0.2mm",
+  '54'="Rain 54 mm",
+  '110'="Rain 110 mm",
+  '160'="Rain 160 mm",
+  '210'="Rain 210 mm"
+  
+)
+rain_labeller <- function(variable,value){
+  return(rain_names[value])
+}
+
+interac<- ggplot(effect_data, aes(x = weeksince, y = fit, color = rain21)) +
+  geom_line(linewidth=2, color="#652770") +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, fill = "#652770", color="gray87") +
+  facet_wrap(~rain21, nrow = 1, labeller = rain_labeller) +
+  labs(x = "Weeks since treatments", y = "Predicted abundance \n of mosquitoes") +
+  theme_bw(base_size = 21)
+interac <- interac + theme(legend.position = "none",
+                           panel.spacing = unit(0, "cm"),
+                           strip.text.x = element_text(size = 14),
+                           strip.background=element_rect(fill="white"))
+interac
+plotd <- interac 
+
+#SUPP MATERIAL
+
+#Figure Panel plot
+
+# newdata <- data.frame(mintemp21 = abundancias_df$mintemp21, 
+#                       max_relative_humidity = abundancias_df$max_relative_humidity,
+#                       rain21 = abundancias_df$rain21, WE FIX acc.RAIN to 0.2,54,110 and 210
+#                       n_imbornales_agua =43,
+#                       nrturist = abundancias_df$nrturist,
+#                       weeksince= abundancias_df$weeksince, WE FIX WEEKSINCE in 1 and 6 to compare
+#                       trap_name= "A_SP_BL_12")
+# dataplot <- as.data.frame(predictiondata$predi02_1)
+# dataplot$predi02_6 <- predictiondata$predi02_6
+# dataplot$predi54_1 <- predictiondata$predi54_1
+# dataplot$predi54_6 <- predictiondata$predi54_6
+# dataplot$predi110_1 <- predictiondata$predi110_1
+# dataplot$predi110_6 <- predictiondata$predi110_6
+# dataplot$predi210_1 <- predictiondata$predi210_1
+# dataplot$predi210_6 <- predictiondata$predi210_6
+# dataplot$start_date.x <- abundances$start_date.x
+
+writexl::write_xlsx(dataplot, path = "C:\\Users\\lblan\\OneDrive\\Escritorio\\CEAB\\2022\\Abundance_study\\dataplotsm.xlsx")
+dataplot$start_date.x <- as_date(dataplot$start_date.x)
+Sys.setlocale(category = "LC_ALL", locale = "EN")
+plot02_16 <- abundances %>% 
+  ggplot() +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_4")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_5")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_6")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_7")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_8")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_9")) +
+  geom_line(data= dataplot, aes(x=start_date.x , y= `predictiondata$predi02_1`),col="darkblue", size = 1.9) +
+  geom_line(data= dataplot, aes(x=start_date.x , y= predi02_6),col="red", size = 1.9) +
+  scale_x_date("Sampling season", date_breaks = "1 month", date_labels = "%b") +
+  ylab("Abundance (average)") + ylim(0,100) + ggtitle("0.2mm Acc. Rainfall") +
+  # scale_y_continuous(breaks = seq(from = 0, to = 700, by = 20))+
+  theme_classic(base_size = 18)
+
+plot54_16 <- abundances %>% 
+  ggplot() +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_4")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_5")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_6")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_7")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_8")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_9")) +
+  geom_line(data= dataplot, aes(x=start_date.x , y= predi54_1),col="darkblue", size = 1.9) +
+  geom_line(data= dataplot, aes(x=start_date.x , y= predi54_6),col="red", size = 1.9) +
+  scale_x_date("Sampling season", date_breaks = "1 month", date_labels = "%b") +
+  ylab("Abundance (average)") + ylim(0,100) + ggtitle("54mm Acc. Rainfall") +
+  # scale_y_continuous(breaks = seq(from = 0, to = 700, by = 20))+
+  theme_classic(base_size = 18)
+
+plot110_16 <- abundances %>% 
+  ggplot() +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_4")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_5")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_6")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_7")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_8")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_9")) +
+  geom_line(data= dataplot, aes(x=start_date.x , y= predi110_1),col="darkblue", size = 1.9) +
+  geom_line(data= dataplot, aes(x=start_date.x , y= predi110_6),col="red", size = 1.9) +
+  scale_x_date("Sampling season", date_breaks = "1 month", date_labels = "%b") +
+  ylab("Abundance (average)") + ylim(0,100) + ggtitle("110mm Acc. Rainfall") +
+  # scale_y_continuous(breaks = seq(from = 0, to = 700, by = 20))+
+  theme_classic(base_size = 18)
+
+plot210_16 <- abundances %>% 
+  ggplot() +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_4")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_5")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_6")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_7")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_8")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_9")) +
+  geom_line(data= dataplot, aes(x=start_date.x , y= predi210_1),col="darkblue", size = 1.9) +
+  geom_line(data= dataplot, aes(x=start_date.x , y= predi210_6),col="red", size = 1.9) +
+  scale_x_date("Sampling season", date_breaks = "1 month", date_labels = "%b") +
+  ylab("Abundance (average)") + ylim(0,150) + ggtitle("210mm Acc. Rainfall") +
+  # scale_y_continuous(breaks = seq(from = 0, to = 700, by = 20))+
+  theme_classic(base_size = 18)
+
+
+library(patchwork)
+
+(plot02_16 + plot54_16) / (plot110_16 + plot210_16)
+
+#FIGURE S4 Supp.material
+
+#We fix Temperature
+mean(abundancias_df$mintemp21) #we take the average of the mintemp21
+newdata <- data.frame(mintemp21 = 15.84,
+                      max_relative_humidity = abundancias_df$max_relative_humidity,
+                      rain21 = abundancias_df$rain21, 
+                      n_imbornales_agua =43,
+                      nrturist = abundancias_df$nrturist,
+                      weeksince= abundancias_df$weeksince,
+                      trap_name= "A_SP_BL_12")
+
+predict(modelo_ofi, newdata, type="response", allow.new.levels = T)
+predictiondata <- as.data.frame(predict(modelo_ofi, newdata, type="response",allow.new.levels = T))
+predictiondata$predi <- predictiondata$`predict(modelo_ofi, newdata, type = "response", allow.new.levels = T)`
+abundances <- cbind(abundancias_df, predictiondata)
+abundances$week <- as.character(abundances$week)
+abundances$week <- as.numeric(abundances$week)
+abundances$start_date.x <- as_date(abundances$start_date.x)
+
+Sys.setlocale(category = "LC_ALL", locale = "EN")
+plot_temp_fix <- abundances %>% 
+  ggplot() +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_4")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_5")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_6")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_7")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_8")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_9")) +
+  geom_line(aes(x=start_date.x , y= predi),col="darkblue", size = 1.9) +
+  scale_x_date("Sampling season", date_breaks = "1 month", date_labels = "%b") +
+  ylab("Abundance (average)") + ylim(0,100) +
+  # scale_y_continuous(breaks = seq(from = 0, to = 700, by = 20))+
+  theme_classic(base_size = 21)
+plot_temp_fix #plot b in panel Figure 3
+
+
+#Now we fix and limit rain
+newdata <- data.frame(mintemp21 = abundancias_df$mintemp21,
+                      max_relative_humidity = abundancias_df$max_relative_humidity,
+                      rain21 =54, 
+                      n_imbornales_agua =43,
+                      nrturist = abundancias_df$nrturist,
+                      weeksince= abundancias_df$weeksince,
+                      trap_name= "A_SP_BL_12")
+
+predict(modelo_ofi, newdata, type="response", allow.new.levels = T)
+predictiondata <- as.data.frame(predict(modelo_ofi, newdata, type="response",allow.new.levels = T))
+predictiondata$predi <- predictiondata$`predict(modelo_ofi, newdata, type = "response", allow.new.levels = T)`
+abundances <- cbind(abundancias_df, predictiondata)
+abundances$week <- as.character(abundances$week)
+abundances$week <- as.numeric(abundances$week)
+abundances$start_date.x <- as_date(abundances$start_date.x)
+
+Sys.setlocale(category = "LC_ALL", locale = "EN")
+plot_rain_fix <- abundances %>% 
+  ggplot() +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_4")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6, data = filter(abundances, trap_name == "A_SP_BL_5")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col= "#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_6")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies), col= "#DE9826", linewidth = 0.65, alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_7")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_8")) +
+  geom_line(aes(x= start_date.x, y= nrperspecies),  col="#DE9826", linewidth = 0.65,alpha=0.6,data = filter(abundances, trap_name == "A_SP_BL_9")) +
+  geom_line(aes(x=start_date.x , y= predi),col="darkblue", size = 1.9) +
+  scale_x_date("Sampling season", date_breaks = "1 month", date_labels = "%b") +
+  ylab("Abundance (average)") + ylim(0,150) +
+  # scale_y_continuous(breaks = seq(from = 0, to = 700, by = 20))+
+  theme_classic(base_size = 21)
+plot_rain_fix #plot b in panel Figure 3
+
+(plot_temp_fix + plot_rain_fix) + plot_annotation(tag_levels = "a")
